@@ -1,67 +1,65 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <string.h>
+#include <sys/select.h>
 
-#define PORT 8080
-#define BUFFER_SIZE 1024
+int main(int argc, char *argv[])
+{
+    // Khai bao socket sender
+    int sender = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
-int main() {
-    int server_fd, new_socket, valread;
-    struct sockaddr_in address;
-    int addrlen = sizeof(address);
-    char buffer[BUFFER_SIZE] = {0};
+    struct sockaddr_in saddr;
+    saddr.sin_family = AF_INET;
+    saddr.sin_addr.s_addr = inet_addr(argv[1]);
+    saddr.sin_port = htons(atoi(argv[2]));
 
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
-        perror("socket failed");
-        exit(EXIT_FAILURE);
-    }
+    // Khai bao socket receiver
+    int receiver = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(PORT);
+    struct sockaddr_in raddr;
+    raddr.sin_family = AF_INET;
+    raddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    raddr.sin_port = htons(atoi(argv[3]));
 
-    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
-        perror("bind failed");
-        exit(EXIT_FAILURE);
-    }
+    bind(receiver, (struct sockaddr *)&raddr, sizeof(raddr));
 
-    if (listen(server_fd, 3) < 0) {
-        perror("listen failed");
-        exit(EXIT_FAILURE);
-    }
+    fd_set fdread, fdtest;
+    FD_ZERO(&fdread);
+    FD_SET(STDIN_FILENO, &fdread);
+    FD_SET(receiver, &fdread);
 
-    while (1) {
-        printf("Waiting for client...\n");
+    char buf[256];
 
-        if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
-            perror("accept failed");
-            exit(EXIT_FAILURE);
+    while (1)
+    {
+        fdtest = fdread;
+        int ret = select(receiver + 1, &fdtest, NULL, NULL, NULL);
+        if (ret < 0)
+        {
+            perror("select() failed");
+            break;
         }
 
-        printf("Client connected.\n");
-
-        int count = 0;
-        char* token;
-
-        while (1) {
-            valread = read(new_socket, buffer, BUFFER_SIZE);
-            if (valread == 0) {
-                break;
-            }
-
-            token = strtok(buffer, "0123456789");
-            while (token != NULL) {
-                count++;
-                token = strtok(NULL, "0123456789");
-            }
+        if (FD_ISSET(STDIN_FILENO, &fdtest))
+        {
+            fgets(buf, sizeof(buf), stdin);
+            sendto(sender, buf, strlen(buf), 0, 
+                (struct sockaddr *)&saddr, sizeof(saddr));
         }
 
-        printf("Number of occurrences of \"0123456789\": %d\n", count);
-        close(new_socket);
+        if (FD_ISSET(receiver, &fdtest))
+        {
+            ret = recvfrom(receiver, buf, sizeof(buf), 0, NULL, NULL);
+            if (ret < sizeof(buf))
+                buf[ret] = 0;
+            printf("Received: %s\n", buf);
+        }
     }
 
     return 0;
 }
-

@@ -5,8 +5,6 @@
 #include <netdb.h>
 #include <string.h>
 #include <arpa/inet.h>
-#include <sys/select.h>
-#include <time.h>
 
 int main() {
     // Khai báo socket client
@@ -16,7 +14,7 @@ int main() {
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    addr.sin_port = htons(9999); 
+    addr.sin_port = htons(9000); 
 
     // Thực hiện kết nối đến server
     int res = connect(client, (struct sockaddr *)&addr, sizeof(addr));
@@ -31,7 +29,6 @@ int main() {
 
     while (1)
     {
-
         // Khởi tạo lại tập fdread
         FD_ZERO(&fdread);
 
@@ -68,7 +65,7 @@ int main() {
                 break;
             
             buf[ret] = 0;
-            printf("Received by : %s\n",buf);
+            printf("Received: %s\n", buf);
         }
     }
 
