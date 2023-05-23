@@ -1,56 +1,79 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <string.h>
 #include <arpa/inet.h>
-
-#define PORT 8080
-#define BUFFER_SIZE 1024
+#include <sys/select.h>
+#include <time.h>
 
 int main() {
-    int sock = 0;
-    struct sockaddr_in serv_addr;
-    char buffer[BUFFER_SIZE] = {0};
+    // Khai báo socket client
+    int client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
-    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        printf("\n Socket creation error \n");
-        return -1;
+    // Khai báo địa chỉ server
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    addr.sin_port = htons(9999); 
+
+    // Thực hiện kết nối đến server
+    int res = connect(client, (struct sockaddr *)&addr, sizeof(addr));
+    if (res == -1) {
+        printf("Khong ket noi duoc den server!\n");
+        return 1;
+    }
+    
+    // Khai báo tập fdset
+    fd_set fdread;
+    char buf[256];
+
+    while (1)
+    {
+
+        // Khởi tạo lại tập fdread
+        FD_ZERO(&fdread);
+
+        // Gắn các descriptor vào tập fdread
+        FD_SET(STDIN_FILENO, &fdread);
+        FD_SET(client, &fdread);
+        
+        // Chờ đến khi sự kiện xảy ra
+        int ret = select(client + 1, &fdread, NULL, NULL, NULL);
+        if (ret == -1)
+        {
+            perror("select() failed");
+            break;
+        }
+        
+        // Kiểm tra sự kiện có dữ liệu từ bàn phím
+        if (FD_ISSET(STDIN_FILENO, &fdread))
+        {
+            fgets(buf, sizeof(buf), stdin);
+            send(client, buf, strlen(buf), 0);
+
+            // Nếu nhập "exit" thì kết thúc
+            if (strncmp(buf, "exit", 4) == 0)
+                break;
+        }
+
+        // Kiểm tra sự kiện có dữ liệu truyền đến qua socket
+        if (FD_ISSET(client, &fdread))
+        {
+            ret = recv(client, buf, sizeof(buf), 0);
+
+            // Nếu ngắt kết nối thì kết thúc
+            if (ret <= 0)
+                break;
+            
+            buf[ret] = 0;
+            printf("Received by : %s\n",buf);
+        }
     }
 
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(PORT);
+    // Kết thúc, đóng socket
+    close(client);
 
-    // Convert IPv4 and IPv6 addresses from text to binary form
-    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
-        printf("\nInvalid address/ Address not supported \n");
-        return -1;
-    }
-
-    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        printf("\nConnection Failed \n");
-        return -1;
-    }
-
-    FILE* fp = fopen("data.txt", "r");
-    if (fp == NULL) {
-        printf("Cannot open file.\n");
-        exit(EXIT_FAILURE);
-    }
-
-    while (!feof(fp)) {
-        size_t bytes_read = fread(buffer, sizeof
-	char), BUFFER_SIZE, fp);
-		if (bytes_read == 0) {
-		break;
-		}
-    send(sock, buffer, bytes_read, 0);
-    memset(buffer, 0, BUFFER_SIZE);
-	}
-	
-	fclose(fp);
-	shutdown(sock, SHUT_WR);
-	
-	return 0;
+    return 0;
 }
-
